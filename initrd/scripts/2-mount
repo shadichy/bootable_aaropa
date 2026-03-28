@@ -8,14 +8,16 @@
 #
 
 to_mntpt() {
+	local r
 	case "$1" in
-	bootloader) : /boot ;;
-	esp) : /boot/efi ;;
-	userdata) : /data ;;
-	/*) : "$1" ;;
+	bootloader) r=/boot ;;
+	esp) r=/boot/efi ;;
+	userdata) r=/data ;;
+	cdrom) r=/mnt/cdrom ;;
+	/*) r=$1 ;;
 	*) return 1 ;;
 	esac
-	export RESULT=$_
+	export RESULT=$r
 }
 
 handle_fstab_line() {
