@@ -1,6 +1,6 @@
-# shellcheck shell=ash
+# shellcheck shell=ash disable=2016,2068,3036,3060
 # By Shadichy <shadichy@blisslabs.org>
-# Last updated 2024/10/01
+# Last updated 2026/03/28
 #
 # License: GNU Public License
 # We explicitly grant the right to use the scripts
@@ -9,18 +9,18 @@
 
 to_mntpt() {
 	case "$1" in
-	bootloader) echo /boot ;;
-	esp) echo /boot/efi ;;
-	userdata) echo /data ;;
-	/*) echo "$1" ;;
+	bootloader) : /boot ;;
+	esp) : /boot/efi ;;
+	userdata) : /data ;;
+	/*) : "$1" ;;
 	*) return 1 ;;
 	esac
+	export RESULT=$_
 }
 
 handle_fstab_line() {
-	local device=$1 target=$2 # type=$3 flags=$4 vold_flags=$5
+	local device=$1 # target=$2 type=$3 flags=$4 vold_flags=$5
 
-	# shellcheck disable=SC3060,SC2016
 	case "$1" in
 	*'$SLOT'*) if [ "$SLOT" ]; then
 		local s _ss
@@ -33,9 +33,15 @@ handle_fstab_line() {
 	'$FS'*)
 		device=${1//'$FS'/"/mnt/$SRC"}
 		if [ -f "$device" ]; then
-			handle_fstab_line "/dev/loop$(setup_loop "$device")" "$2" "$3" "$4" "$5"
+			setup_loop "$device"
+			handle_fstab_line "/dev/loop$RESULT" "$2" "$3" "$4" "$5"
 		elif [ -d "$device" ]; then
-			mount --bind "$device" "$MODE_BASE$(to_mntpt "$2")"
+			if to_mntpt "$2"; then
+				mount --bind "$device" "${MODE_BASE}${RESULT}"
+			else
+				echo -e "WARNING: Failed to bind mount $device: No such target mountpoint!" >&2
+				return 1
+			fi
 		fi
 		return $?
 		;;
@@ -49,14 +55,18 @@ handle_fstab_line() {
 		# shellcheck disable=SC2012
 		echo "#>$2 $(ls -ld "$device" | awk '{print $5$6}' | tr ',' ' ')"
 
-		if target=$(to_mntpt "$2"); then
-			echo "/dev/block/by-name/$2 $target $3 $4 $5"
+		if to_mntpt "$2"; then
+			echo "/dev/block/by-name/$2 $RESULT $3 $4 $5"
 		fi
 
 		case "$2" in
 		"system$SLOT")
 			# Keep system read-only unless rw is requested
 			mount ${3:+-t "$3"} ${4:+-o "$4"} -r "$device" /android
+			# Remount rw for recovery
+			if [ "$RCVRY" ]; then
+				mount -o remount,rw foo /android
+			fi
 
 			# Loop mount system.img
 			local _img=/android/system.img
@@ -87,7 +97,10 @@ handle_fstab_line() {
 			esac
 
 			case "$is_nodev" in
-			nodev*) echo "$1 $(to_mntpt "$2") $3 $4 $5" ;;
+			nodev*)
+				to_mntpt "$2"
+				echo "$1 $RESULT $3 $4 $5"
+				;;
 			*) ;;
 			esac
 			return $?
@@ -110,13 +123,13 @@ process_fstab() {
 }
 
 link_fstab() {
-	ROOT_FSTAB=$(ls $MODE_BASE/fstab.*)
+	ROOT_FSTAB=$(find "$MODE_BASE" -mindepth 1 -maxdepth 1 -type f -iname 'fstab.*' -print -quit)
 	fstab=${REAL_FSTAB:-$ROOT_FSTAB}
 
-	cat $fstab >>/tmp/fstab.real
-	mount --bind /tmp/fstab.real $fstab
+	cat "$fstab" >>/tmp/fstab.real
+	mount --bind /tmp/fstab.real "$fstab"
 
 	if [ "$REAL_FSTAB" ]; then
-		mount --bind /tmp/fstab.real $ROOT_FSTAB
+		mount --bind /tmp/fstab.real "$ROOT_FSTAB"
 	fi
 }
