@@ -402,8 +402,6 @@ process_fstab
 
 probe_recovery
 
-link_fstab
-
 if [ 0"$DEBUG" -gt 1 ]; then
 	echo -e "\nType 'exit' to continue booting...\n"
 	debug_shell debug-found
@@ -415,6 +413,8 @@ fi
 # [ "$AUTO" != 1 ] && detect_hardware && FOUND=1
 
 [ "$INSTALL" ] && setup_install
+
+link_fstab
 
 setup_ab_loops
 mount_recovery
