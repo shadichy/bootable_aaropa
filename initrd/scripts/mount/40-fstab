@@ -1,6 +1,6 @@
 # shellcheck shell=ash disable=2016,2068,3036,3060
 # By Shadichy <shadichy@blisslabs.org>
-# Last updated 2026/03/28
+# Last updated 2026/04/20
 #
 # License: GNU Public License
 # We explicitly grant the right to use the scripts
@@ -124,14 +124,23 @@ process_fstab() {
 	done </tmp/fstab.mirror >>/tmp/fstab.real
 }
 
-link_fstab() {
-	ROOT_FSTAB=$(find "$MODE_BASE" -mindepth 1 -maxdepth 1 -type f -iname 'fstab.*' -print -quit)
-	fstab=${REAL_FSTAB:-$ROOT_FSTAB}
+check_fstab() {
+  fstab_file=/mnt/$SRC/$FSTAB
+  fstab_tmp=/tmp/fstab.mirror
 
-	cat "$fstab" >>/tmp/fstab.real
-	mount --bind /tmp/fstab.real "$fstab"
+  if [ -f "$fstab_file" ]; then
+    cp "$fstab_file" $fstab_tmp
+    return $?
+  fi
 
-	if [ "$REAL_FSTAB" ]; then
-		mount --bind /tmp/fstab.real "$ROOT_FSTAB"
-	fi
+  echo "WARNING: No fstab found. Attempting to create one..."
+  build-fstab "/mnt/$SRC" >$fstab_tmp ||
+    debug_shell fatal-err
+
+  cp $fstab_tmp "$fstab_file" 2>/dev/null || :
+}
+
+run() {
+	check_fstab
+	process_fstab
 }

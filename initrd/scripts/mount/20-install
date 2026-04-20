@@ -1,25 +1,11 @@
-# shellcheck shell=sh
+# shellcheck shell=ash disable=2016,2068,3036,3060
 # By Shadichy <shadichy@blisslabs.org>
-# Last updated 2024/10/01
+# Last updated 2026/04/20
 #
 # License: GNU Public License
-# We explicitely grant the right to use the scripts
+# We explicitly grant the right to use the scripts
 # with Android-x86 project.
-# shellcheck disable=3043
-
-auto_decomp() {
-	local file="$1" out="$2"
-	[ -f "$file" ] || return 1
-
-	# Supported (de)compressors: gunzip, bzcat, xzcat, lzcat, zcat
-	false ||
-		gunzip -c "$file" >"$out" ||
-		bzcat "$file" >"$out" ||
-		xzcat "$file" >"$out" ||
-		lzcat "$file" >"$out" ||
-		zcat "$file" >"$out" ||
-		return 2
-}
+#
 
 setup_install() {
 	# Install image overrides:
@@ -57,7 +43,10 @@ setup_install() {
 				[ $ret = 0 ] && install_file=/tmp/install.cpio
 				mount -t tmpfs tmpfs /install
 
-				if ! { cd /install; cat "$install_file" | cpio -iud; }; then
+				if ! {
+					cd /install
+					cat "$install_file" | cpio -iud
+				}; then
 					echo "Failed to extract $install_file"
 					return 1
 				fi
@@ -84,8 +73,14 @@ setup_install() {
 	fi
 
 	if [ "$install_type" = cpio ]; then
+		echo /sbin/mdev >/proc/sys/kernel/hotplug
+		echo /sbin/modprobe >/proc/sys/kernel/modprobe
+
 		cp /scripts/00-ver /install/usr/share/scripts/00-ver
 	else
+		echo /sbin/mdev >/proc/sys/kernel/hotplug
+		echo /sbin/modprobe >/proc/sys/kernel/modprobe
+
 		mkir -p /tmp/i_workdir /tmp/i_upperdir
 		mount -t overlay \
 			-o lowerdir=/install,upperdir=/tmp/i_upperdir,workdir=/tmp/i_workdir \
@@ -107,4 +102,20 @@ setup_install() {
 	# Post setup
 	rm -f /system
 	ln -s /install/android/system /
+
+	export REAL_FSTAB=/install/etc/fstab
+}
+
+run() {
+	# If install is specified, but no install image found (probably wont happend)
+	[ "$AUTO_INSTALL" ] && OEM_INSTALL=1
+	[ "$OEM_INSTALL" ] && INSTALL=$(find "/mnt/$SRC" -mindepth 1 -maxdepth 1 -type f -iname 'install.*' -print -quit)
+	[ "$INSTALL" ] || return 0
+
+	if [ ! -f "/mnt/$SRC/$INSTALL" ]; then
+		echo "WARNING: No install image found: $INSTALL"
+		debug_shell fatal-err
+	fi
+
+	export INSTALL SWITCH_DEST=/install
 }

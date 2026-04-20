@@ -1,16 +1,14 @@
-# shellcheck shell=sh
+# shellcheck shell=ash disable=2016,2068,3036,3060
 # By hmtheboy154 <buingoc67@gmail.com>
 #    Shadichy <shadichy@blisslabs.org>
-# Last updated 2024/10/01
+# Last updated 2026/04/20
 #
 # License: GNU Public License
-# We explicitely grant the right to use the scripts
+# We explicitly grant the right to use the scripts
 # with Android-x86 project.
 #
 
 setup_recovery() {
-  [ "$RCVRY" ] || return 0
-
   if [ ! "$SLOT" ] && [ ! -e "/mnt/$SRC/recovery.img" ]; then
     # Assuming if ramdisk-recovery.img exist, this is booting Live from USB
     if [ -e "/mnt/$SRC/ramdisk-recovery.img" ]; then
@@ -32,7 +30,7 @@ setup_recovery() {
 }
 
 probe_recovery() {
-  [ ! "$RCVRY" ] && [ ! "$RCVRY_PROBE" ] && return 0
+   [ ! "$RCVRY_PROBE" ] && return 0
 
   echo "Detecting hardware for recovery..."
   busybox modprobe -a hid-apple
@@ -40,16 +38,10 @@ probe_recovery() {
   sleep 2
 }
 
-mount_recovery() {
+run() {
   [ "$RCVRY" ] || return 0
+  export SWITCH_DEST=/recovery
 
-  if [ -d /recovery/data/cache ]; then
-    ln -s /data/cache /recovery/cache
-  fi
-}
-
-post_setup_recovery() {
-  [ "$RCVRY" ] || return 0
-
-  umount-r -f /android
+  setup_recovery || debug_shell fatal-err
+  probe_recovery
 }

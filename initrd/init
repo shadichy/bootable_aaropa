@@ -14,86 +14,8 @@
 PATH=/sbin:/bin:/system/bin:/system/xbin:/vendor/bin:/system_ext/bin:/system/vendor/bin:/system/system_ext/bin
 export PATH
 
-# ASCII art
-text_art() {
-	cat <<'EOF'
-      ___           ___                   ___           ___
-     /\  \         /\__\      ___        /\  \         /\  \
-    /::\  \       /:/  /     /\  \      /::\  \       /::\  \
-   /:/\:\  \     /:/  /      \:\  \    /:/\ \  \     /:/\ \  \
-  /::\~\:\__\   /:/  /       /::\__\  _\:\~\ \  \   _\:\~\ \  \
- /:/\:\ \:\__\ /:/__/     __/:/\/__/ /\ \:\ \ \__\ /\ \:\ \ \__\
- \:\~\:\/:/  / \:\  \    /\/:/  /    \:\ \:\ \/__/ \:\ \:\ \/__/
-  \:\ \::/  /   \:\  \   \::/__/      \:\ \:\__\    \:\ \:\__\
-   \:\/:/  /     \:\  \   \:\__\       \:\/:/  /     \:\/:/  /
-    \::/__/       \:\__\   \/__/        \::/  /       \::/  /
-     ~~            \/__/                 \/__/         \/__/
-
-===================================================
-         Have A Truly Blissful Experience
-===================================================
-EOF
-}
-
-bliss_feature() {
-	if [ "$INTERNAL_MOUNT" -gt "0" ]; then
-		cat <<"EOF"
-# WARNING: INTERNAL_MOUNT option is enabled, all the internal partitions
-# will now be recognized as USBs if the supported filesystem is available
-# and will create empty directories like Android, DCIM, Documents, etc.
-
-## DO NOT PRESS "TAP TO FIX", IT WILL FORMAT THE DRIVE!
-EOF
-		export REAL_FSTAB=/system/vendor/etc/fstab.internal.x86
-	fi
-
-	# Enabling AOSP features for PC
-	if [ "$PC_MODE" -gt "0" ]; then
-		cat <<"EOF"
-# WARNING: PC_MODE will not work once Magisk or KernelSU modules are installed.
-# Visit BlissOS wiki for more info & solutions
-EOF
-		mount --bind /system/etc/hidden_xml/pc.xml /system/etc/permissions/pc.xml
-	fi
-
-	if [ "$HPE" -gt "0" ]; then
-		cat <<"EOF"
-# WARNING: HPE will not work once Magisk or KernelSU modules are installed.
-# Visit BlissOS wiki for more info & solutions
-EOF
-		mount --bind /system/etc/hidden_xml/hpe.xml /system/etc/sysconfig/hpe.xml
-	fi
-
-	# Hide bootctrl from VINTF manifest if we don't set up virtual A/B
-	if ! grep androidboot.slot_suffix /proc/cmdline; then
-		cat <<"EOF"
-# WARNING: The system is not prepared with Virtual A/B, 
-# so OTA Update will not be supported
-EOF
-		cat <<'EOF' >/tmp/fakeboot.xml
-<?xml version="1.0" encoding="utf-8"?>
-<manifest version="1.0" type="device">
-</manifest>
-EOF
-		mount --bind /tmp/fakeboot.xml /system/vendor/etc/vintf/manifest/android.hardware.boot@1.2.xml
-	fi
-
-	# Hide BLE feature from the system
-	if [ "$BT_BLE_DISABLE" -ge "1" ]; then
-		cat <<EOF
-# NOTICE: BLE is set to be disabled
-EOF
-		cat <<EOF >/tmp/noble.xml
-<?xml version="1.0" encoding="utf-8"?>
-<permissions>
-</permissions>
-EOF
-		mount --bind /tmp/noble.xml /system/vendor/etc/permissions/android.hardware.bluetooth_le.xml
-	fi
-}
-
 # configure debugging output
-if [ "$DEBUG" ] || [ "$INSTALL" ]; then
+if [ "$DEBUG" ]; then
 	LOG=/tmp/log
 	set -x
 else
@@ -113,14 +35,14 @@ if test x"$HAS_CTTY" != x"Yes"; then
 	busybox --install -s /bin/
 
 	# spawn shells on tty 2 and 3 if debug or install
-	if [ "$INSTALL" ] || [ "$DEBUG" ]; then
+	if [ "$DEBUG" ]; then
 		# ensure they can open a controlling tty
 		mknod /dev/tty c 5 0
 		# create device nodes then spawn on them
 		mknod /dev/tty2 c 4 2 && openvt
 		mknod /dev/tty3 c 4 3 && openvt
 	fi
-	if [ "$INSTALL" ] || [ "$DEBUG" ]; then
+	if [ "$DEBUG" ]; then
 		echo 0 0 0 0 >/proc/sys/kernel/printk
 	fi
 	# initialise /dev (first time)
@@ -168,55 +90,6 @@ try_mount() {
 	*TYPE=*) mount -o $RW,noatime $@ ;;
 	*) return 1 ;;
 	esac
-}
-
-check_sysroot() {
-	local dev=$1 file=$2
-
-	if try_mount ro "$dev" /mnt && [ -e /mnt/"$SRC"/$file ]; then
-		ROOT=$dev
-		return 0
-	fi
-
-	umount-r /mnt
-	return 1
-}
-
-: ${SLEEP_SECONDS:=5}
-: ${SEARCH_INTERVAL:=2}
-
-find_sysroot_by_file() {
-	local file=$1 iter=$2 dev _
-	for _ in $(seq 0 "$iter"); do
-		for dev in /dev/[hmnsvx][dmrv][0-9a-z]*; do
-			test -e "$dev" || continue
-			echo -e "Scanning $dev...\n"
-
-			check_sysroot "$dev" "$file" || continue
-			echo -e "Found at $dev\n"
-			return 0
-		done
-		sleep $SLEEP_SECONDS
-		echo -n .
-	done
-
-	echo -e "Detecting failed after $iter iterations for file $file!\n"
-	return 1
-}
-
-sysroot_search() {
-	cat <<EOF
-Detecting Android-x86...
-
-If it took too long to detect, reboot and check your installation folder
-
-EOF
-	local file
-	for file in $ROOT_SEARCH_FILES; do
-		find_sysroot_by_file "$file" "$SEARCH_INTERVAL" && return 0
-		sleep $SLEEP_SECONDS
-	done
-	return 1
 }
 
 # "foo" as mount source is given to workaround a Busybox bug with NFS
@@ -275,19 +148,6 @@ for c in $(cat /proc/cmdline); do
 	esac
 done
 
-# If is booting from Ventoy GRUB2 Mode
-if [ -d "$VTOY_PATH" ]; then
-	"$VTOY_PATH/hook/android/ventoy-disk.sh"
-	export ROOT=/dev/mapper/ventoy
-fi
-
-if [ -z "$SRC" ]; then
-	if [ -z "$ISO" ] && [ "$BOOT_IMAGE" ]; then
-		# Avoid GRUB partition prefix
-		SRC=$(dirname "${BOOT_IMAGE#*/}")
-	fi
-fi
-
 # Most of the times they mislead devices in /dev with /dev/block, as
 # /dev/block is used in Android (booted). So this is a workaround to
 # find the correct device.
@@ -295,116 +155,86 @@ for _d in /dev/[hmnsvx][dmrv][0-9a-z]*; do
 	ln -s "$_d" /dev/block/
 done
 
-if [ 0"$DEBUG" -gt 0 ]; then
-	echo -e "\nType 'exit' to continue booting...\n"
-	debug_shell debug-pre
-fi
-
-[ -d "$VTOY_PATH" ] && export HAS_VTOY=1 ROOT=/dev/mapper/ventoy
-
-if [ "$ROOT" ]; then
-	# Wait for ROOT to appear
-	: ${ROOTWAIT:=30} # Default to 30 sec
-	for _s in $(seq 0 $ROOTWAIT); do
-		# If is booting from Ventoy GRUB2 Mode
-		if [ "$HAS_VTOY" = 1 ]; then
-			"$VTOY_PATH/hook/android/ventoy-disk.sh"
-		else
-			_root=$(find_device "$ROOT")
-		fi
-
-		[ -e "$_root" ] && break
-		sleep 1
-	done
-	export ROOT=$_root
-	unset _root
+[ "$SRC" ] || if [ -z "$ISO" ] && [ "$BOOT_IMAGE" ]; then
+	# Avoid GRUB partition prefix
+	SRC=$(dirname "${BOOT_IMAGE#*/}")
 fi
 
 # FSTAB file name
 : "${FSTAB:=fstab.android}"
 export FSTAB
 
+export ROOTWAIT=${ROOTWAIT:-30}
+
+_find_root() {
+	local _root
+	if [ "$ROOT" ]; then
+		# Wait for ROOT to appear
+		# Default to 30 sec
+		for _s in $(seq 0 "$ROOTWAIT"); do
+			_root=$(find_device "$ROOT")
+
+			[ -e "$_root" ] && break
+			sleep 1
+		done
+		export ROOT=$_root
+	fi
+}
+
+_mount_root_fallback() { debug_shell fatal-err; }
+
+export \
+	find_root=_find_root \
+	mount_root_fallback=_mount_root_fallback
+
+if [ 0"$DEBUG" -gt 0 ]; then
+	echo -e "\nType 'exit' to continue booting...\n"
+	debug_shell debug-pre
+fi
+
+# run early scripts
+for s in /scripts/early/*; do
+	# shellcheck disable=SC1090
+	[ -e "$s" ] && source "$s"
+	type run >/dev/null && run
+done
+
+$find_root
+
 cd /
-# If there's no ROOT= specified, try to find one for 5 times
-if [ ! "$ROOT" ] || ! try_mount ro "$ROOT" /mnt; then
-	: "${ROOT_SEARCH_FILES:="$FSTAB ${BOOT_IMAGE#*/} system$SLOT.?fs system$SLOT.img system$SLOT/system/build.prop system/build.prop"}"
-
-	# If is live/install mode, prior to search for $INSTALL image, default to install.sfs
-	if [ "$INSTALL" ] || grep -q 'androidboot.live=true' /proc/cmdline; then
-		ROOT_SEARCH_FILES="${INSTALL:-install.sfs} $ROOT_SEARCH_FILES"
-	fi
-
-	# If is booting from iso/loopback
-	if [ "$ISO" ]; then
-		ROOT_SEARCH_FILES="$ISO $ROOT_SEARCH_FILES"
-	fi
-
-	sysroot_search
-fi || debug_shell fatal-err
+[ ! "$ROOT" ] || ! try_mount ro "$ROOT" /mnt || $mount_root_fallback
 
 remount_rw
 
-if [ "$ISO" ]; then
-	mount -o loop "/mnt/$SRC/$ISO" /mnt
-fi
-# If install is specified, but no install image found (probably wont happend)
-# Will be deprecated
-if [ "$INSTALL" ] && [ ! -f "/mnt/$SRC/$INSTALL" ]; then
-	debug_shell fatal-err
-fi
+export SWITCH_DEST=/android
 
-hash -r
-text_art
-
-if ! grep 'sse4_2' /proc/cpuinfo 1>/dev/null; then
-	echo 'WARNING: Your CPU does not support SSE4.2 instructions, the OS will not boot'
-fi
-
-if [ "$RCVRY" ]; then
-	MODE_BASE=/recovery
-else
-	MODE_BASE=/android
-fi
-export MODE_BASE
-
-# load scripts
-for s in /scripts/* /mnt/"$SRC"/scripts/*; do
+# run scripts
+for s in /scripts/mount/* /mnt/"$SRC"/scripts/*; do
 	# shellcheck disable=SC1090
-	test -e "$s" && source "$s"
+	[ -e "$s" ] && source "$s"
+	type run >/dev/null && run
 done
-
-if [ "$COPYTORAM" ] && [ "$COPYTORAM" != false ]; then
-	copy_to_ram
-fi
-
-setup_recovery || debug_shell fatal-err
-check_fstab
-process_fstab
-
-# If neither RCVRY nor INSTALL is specified
-[ "$RCVRY" ] || [ "$INSTALL" ] || bliss_feature
-
-probe_recovery
 
 if [ 0"$DEBUG" -gt 1 ]; then
 	echo -e "\nType 'exit' to continue booting...\n"
 	debug_shell debug-found
 fi
 
-# # A target should provide its detect_hardware function.
-# # On success, return 0 with the following values set.
-# # return 1 if it wants to use auto_detect
-# [ "$AUTO" != 1 ] && detect_hardware && FOUND=1
+# We must disable mdev before switching to Android
+# since it conflicts with Android's init
+echo >/proc/sys/kernel/hotplug
 
-[ "$INSTALL" ] && setup_install
+# Use correct modprobe location
+echo /system/bin/modprobe >/proc/sys/kernel/modprobe
 
-link_fstab
+export ANDROID_ROOT=/system
 
-mount_recovery
-setup_tslib
-setup_dpi
-post_detect
-post_setup_recovery
+# run late scripts
+for s in /scripts/late/*; do
+	# shellcheck disable=SC1090
+	[ -e "$s" ] && source "$s"
+	type run >/dev/null && run
+done
 
 if [ 0"$DEBUG" -gt 2 ]; then
 	echo -e "\nUse Alt-F1/F2/F3 to switch between virtual consoles"
@@ -413,24 +243,11 @@ if [ 0"$DEBUG" -gt 2 ]; then
 	debug_shell debug-late
 fi
 
-if [ "$INSTALL" ]; then
-	exec ${SWITCH:-switch_root} /install /sbin/init
-else
-	# We must disable mdev before switching to Android
-	# since it conflicts with Android's init
-	echo >/proc/sys/kernel/hotplug
+# Copy /tmp/log if DEBUG mode is set
+[ -n "$DEBUG" ] && cp /tmp/log $SWITCH_DEST/data/bootlog.txt
 
-	# Use correct modprobe location
-	echo /system/bin/modprobe >/proc/sys/kernel/modprobe
-
-	export ANDROID_ROOT=/system
-
-	# Copy /tmp/log to /android/data/bootlog.txt if DEBUG mode is set
-	[ -n "$DEBUG" ] && cp /tmp/log /android/data/bootlog.txt
-
-	# shellcheck disable=SC2093
-	exec ${SWITCH:-switch_root} $MODE_BASE /init
-fi
+# shellcheck disable=SC2093
+exec ${SWITCH:-switch_root} $SWITCH_DEST /init
 
 # avoid kernel panic
 while :; do

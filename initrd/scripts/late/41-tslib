@@ -1,4 +1,12 @@
-# shellcheck shell=sh
+# shellcheck shell=ash disable=2016,2068,3036,3060
+# Modified by BlissLabs & Contributors
+# Last updated 2026/04/20
+#
+# License: GNU Public License
+# We explicitly grant the right to use the scripts
+# with Android-x86 project.
+#
+
 setup_tslib() {
 	# setup for pointercal
 	[ "$BOARD_USES_TSLIB" ] && return

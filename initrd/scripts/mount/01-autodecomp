@@ -1,0 +1,21 @@
+# shellcheck shell=ash
+# By Chih-Wei Huang <cwhuang@linux.org.tw>
+#
+# License: GNU Public License
+# We explicitely grant the right to use the scripts
+# with Android-x86 project.
+#
+
+auto_decomp() {
+	local file="$1" out="$2"
+	[ -f "$file" ] || return 1
+
+	# Supported (de)compressors: gunzip, bzcat, xzcat, lzcat, zcat
+	false ||
+		gunzip -c "$file" >"$out" ||
+		bzcat "$file" >"$out" ||
+		xzcat "$file" >"$out" ||
+		lzcat "$file" >"$out" ||
+		zcat "$file" >"$out" ||
+		return 2
+}
