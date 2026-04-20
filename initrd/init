@@ -461,6 +461,71 @@ if [ "$INSTALL" ] && [ ! -f "/mnt/$SRC/$INSTALL" ]; then
 	debug_shell fatal-err
 fi
 
+# Most of the times they mislead devices in /dev with /dev/block, as
+# /dev/block is used in Android (booted). So this is a workaround to
+# find the correct device.
+for _d in /dev/[hmnsvx][dmrv][0-9a-z]*; do
+	ln -s "$_d" /dev/block/
+done
+
+if [ 0"$DEBUG" -gt 0 ]; then
+	echo -e "\nType 'exit' to continue booting...\n"
+	debug_shell debug-pre
+fi
+
+[ -d "$VTOY_PATH" ] && export HAS_VTOY=1 ROOT=/dev/mapper/ventoy
+
+if [ "$ROOT" ]; then
+	# Wait for ROOT to appear
+	: ${ROOTWAIT:=30} # Default to 30 sec
+	for _s in $(seq 0 $ROOTWAIT); do
+		# If is booting from Ventoy GRUB2 Mode
+		if [ "$HAS_VTOY" = 1 ]; then
+			"$VTOY_PATH/hook/android/ventoy-disk.sh"
+		else
+			_root=$(find_device "$ROOT")
+		fi
+
+		[ -e "$_root" ] && break
+		sleep 1
+	done
+	export ROOT=$_root
+	unset _root
+fi
+
+# FSTAB file name
+: "${FSTAB:=fstab.android}"
+export FSTAB
+
+cd /
+# If there's no ROOT= specified, try to find one for 5 times
+if [ ! "$ROOT" ] || ! try_mount ro "$ROOT" /mnt; then
+	: "${ROOT_SEARCH_FILES:="$FSTAB ${BOOT_IMAGE#*/} system$SLOT.?fs system$SLOT.img system$SLOT/system/build.prop system/build.prop"}"
+
+	# If is live/install mode, prior to search for $INSTALL image, default to install.sfs
+	if [ "$INSTALL" ] || grep -q 'androidboot.live=true' /proc/cmdline; then
+		ROOT_SEARCH_FILES="${INSTALL:-install.sfs} $ROOT_SEARCH_FILES"
+	fi
+
+	# If is booting from iso/loopback
+	if [ "$ISO" ]; then
+		ROOT_SEARCH_FILES="$ISO $ROOT_SEARCH_FILES"
+	fi
+
+	sysroot_search
+fi || debug_shell fatal-err
+
+remount_rw
+
+if [ "$ISO" ]; then
+	mount -o loop "/mnt/$SRC/$ISO" /mnt
+fi
+# If install is specified, but no install image found (probably wont happend)
+# Will be deprecated
+if [ "$INSTALL" ] && [ ! -f "/mnt/$SRC/$INSTALL" ]; then
+	debug_shell fatal-err
+fi
+
 hash -r
 text_art
 
