@@ -1,0 +1,15 @@
+bootstrap_go_package {
+    name: "soong-aaropa",
+    pkgPath: "android/soong/aaropa",
+    deps: [
+        "blueprint",
+        "blueprint-pathtools",
+        "soong",
+        "soong-android",
+    ],
+    srcs: [
+        "soong/initrd/initrd.go",
+        "soong/iso/iso.go",
+    ],
+    pluginFor: ["soong_build"],
+}

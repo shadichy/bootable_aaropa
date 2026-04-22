@@ -1,0 +1,8 @@
+go 1.23
+
+use (
+	.
+	../../../build/soong
+	../../../build/blueprint
+	../../../external/golang-protobuf
+)
