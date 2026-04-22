@@ -7,33 +7,11 @@ import (
 )
 
 func init() {
-	android.RegisterModuleType("aaropa_initrd", InitrdFactory)
-}
-
-type initrdProperties struct {
-	Os_title string
-	Ver      string
-	Inline   *bool
-}
-
-type initrdModule struct {
-	android.ModuleBase
-	properties initrdProperties
-
-	outputFile android.Path
-}
-
-var _ android.Module = (*initrdModule)(nil)
-
-func InitrdFactory() android.Module {
-	module := &initrdModule{}
-	module.AddProperties(&module.properties)
-	android.InitAndroidModule(module)
-	return module
+	android.RegisterModuleType("aaropa_newinstaller", NewInstallerFactory)
 }
 
 var (
-	pctx = android.NewPackageContext("android/soong/aaropa")
+	pctx = android.NewPackageContext("android/soong/aaropa/newinstaller")
 )
 
 type hostToolDependencyTag struct {
@@ -42,13 +20,33 @@ type hostToolDependencyTag struct {
 
 var hostToolDepTag hostToolDependencyTag
 
-func (m *initrdModule) DepsMutator(ctx android.BottomUpMutatorContext) {
+type newInstallerProperties struct {
+	Inline *bool
+}
+
+type newInstallerModule struct {
+	android.ModuleBase
+	properties newInstallerProperties
+
+	outputFile android.Path
+}
+
+var _ android.Module = (*newInstallerModule)(nil)
+
+func NewInstallerFactory() android.Module {
+	module := &newInstallerModule{}
+	module.AddProperties(&module.properties)
+	android.InitAndroidModule(module)
+	return module
+}
+
+func (m *newInstallerModule) DepsMutator(ctx android.BottomUpMutatorContext) {
 	// Add far dependency on toybox and acp host tools
 	ctx.AddFarVariationDependencies(ctx.Config().BuildOSTarget.Variations(), hostToolDepTag, "toybox", "acp")
 }
 
-func (m *initrdModule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
-	m.outputFile = android.PathForModuleOut(ctx, "initrd.img")
+func (m *newInstallerModule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
+	m.outputFile = android.PathForModuleOut(ctx, "install.img")
 
 	// 1. Resolve host tools
 	var toyboxPath android.Path
@@ -78,43 +76,31 @@ func (m *initrdModule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 	// 2. Establish rule builder
 	rule := android.NewRuleBuilder(pctx, ctx)
 
-	// Since bootable/aaropa manually merges initrd_lib into initrd before generating, we use that folder.
-	srcDir := android.PathForSource(ctx, "prebuilts/aaropa/initrd")
-	initrdDir := srcDir.Join(ctx, "initrd")
-
-	// Create the 00-ver script natively in intermediates using Go
-	verScriptOut := android.PathForModuleOut(ctx, "00-ver")
-
-	verStr := m.properties.Ver
-	if verStr == "" {
-		verStr = "15" // Fallback default
-	}
-
-	content := "VER=" + verStr + "\n"
-	if m.properties.Os_title != "" {
-		content += "OS_TITLE=" + m.properties.Os_title + "\n"
-	}
-
-	android.WriteFileRule(ctx, verScriptOut, content)
-
-	stagingDir := android.PathForModuleOut(ctx, "staging_initrd")
+	stagingDir := android.PathForModuleOut(ctx, "staging_newinstaller")
 
 	// Prepare directories and copy inputs
 	rule.Command().Text("rm -rf").Text(stagingDir.String())
 	rule.Command().Text("mkdir -p").
 		Text(stagingDir.String() + "/android").
 		Text(stagingDir.String() + "/apex").
-		Text(stagingDir.String() + "/mnt").
+		Text(stagingDir.String() + "/dev").
 		Text(stagingDir.String() + "/proc").
 		Text(stagingDir.String() + "/sys").
-		Text(stagingDir.String() + "/tmp")
+		Text(stagingDir.String() + "/tmp").
+		Text(stagingDir.String() + "/etc").
+		Text(stagingDir.String() + "/data").
+		Text(stagingDir.String() + "/cdrom").
+		Text(stagingDir.String() + "/boot").
+		Text(stagingDir.String() + "/source").
+		Text(stagingDir.String() + "/hd").
+		Text(stagingDir.String() + "/var/lib/os-prober/mount")
+
+	rule.Command().Text("touch").Text(stagingDir.String() + "/etc/fstab")
 
 	if proptools.Bool(m.properties.Inline) {
-		inlineDir := android.PathForSource(ctx, "bootable/aaropa/initrd")
+		inlineDir := android.PathForSource(ctx, "bootable/newinstaller/install")
 		rule.Command().Tool(acpPath).Text("-dpr").Text(inlineDir.String() + "/.").Text(stagingDir.String() + "/")
 	}
-
-	rule.Command().Tool(acpPath).Text("-p").Input(verScriptOut).Text(stagingDir.String() + "/scripts/00-ver")
 
 	// Run find | cpio | gzip via bash pipeline calling the required toybox host tools
 	rule.Command().
@@ -125,7 +111,7 @@ func (m *initrdModule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 		Tool(toyboxPath).Text("gzip -9 >").
 		Output(m.outputFile.(android.WritablePath))
 
-	rule.Build("build_aaropa_initrd", "Building Aaropa initrd.img via Toybox")
+	rule.Build("build_aaropa_newinstaller", "Building Aaropa install.img (newinstaller) via Toybox")
 
 	ctx.SetOutputFiles(android.Paths{m.outputFile}, "")
 }

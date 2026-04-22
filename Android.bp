@@ -10,6 +10,7 @@ bootstrap_go_package {
     srcs: [
         "soong/initrd/initrd.go",
         "soong/iso/iso.go",
+        "soong/newinstaller/newinstaller.go",
     ],
     pluginFor: ["soong_build"],
 }
