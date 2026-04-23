@@ -76,6 +76,9 @@ func (m *newInstallerModule) GenerateAndroidBuildActions(ctx android.ModuleConte
 	// 2. Establish rule builder
 	rule := android.NewRuleBuilder(pctx, ctx)
 
+	srcDir := android.PathForSource(ctx, "prebuilts/aaropa/newinstaller")
+	installDir := srcDir.Join(ctx, "install")
+
 	stagingDir := android.PathForModuleOut(ctx, "staging_newinstaller")
 
 	// Prepare directories and copy inputs
@@ -94,6 +97,8 @@ func (m *newInstallerModule) GenerateAndroidBuildActions(ctx android.ModuleConte
 		Text(stagingDir.String() + "/source").
 		Text(stagingDir.String() + "/hd").
 		Text(stagingDir.String() + "/var/lib/os-prober/mount")
+
+	rule.Command().Tool(acpPath).Text("-dpr").Text(installDir.String() + "/.").Text(stagingDir.String() + "/")
 
 	rule.Command().Text("touch").Text(stagingDir.String() + "/etc/fstab")
 

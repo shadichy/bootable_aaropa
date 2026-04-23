@@ -109,6 +109,8 @@ func (m *initrdModule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 		Text(stagingDir.String() + "/sys").
 		Text(stagingDir.String() + "/tmp")
 
+	rule.Command().Tool(acpPath).Text("-dpr").Text(initrdDir.String() + "/.").Text(stagingDir.String() + "/")
+
 	if proptools.Bool(m.properties.Inline) {
 		inlineDir := android.PathForSource(ctx, "bootable/aaropa/initrd")
 		rule.Command().Tool(acpPath).Text("-dpr").Text(inlineDir.String() + "/.").Text(stagingDir.String() + "/")
