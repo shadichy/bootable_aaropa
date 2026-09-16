@@ -243,7 +243,7 @@ setup_loop() {
 		fi
 
 		# If loop device fails to setup
-		if ! losetup "$base" "$1" >/dev/null 2>&1; then
+		if ! losetup "$base" "$1" --direct-io=on >/dev/null 2>&1; then
 			i=$next
 			continue
 		fi
